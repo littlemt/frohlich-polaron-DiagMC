@@ -52,17 +52,10 @@ def inBetween(a,b,c,d):
          return False
      
 def r(pins,prem,tauR,tauL,tauOne,tauTwo,q,k,mu,alpha,order,m=1,omegaPH=1):
-    
-    wX=-greensFunction(k, tauR-tauL, mu)
-    alphaT=2*2**.5*np.pi*alpha
-    wY=-alphaT**2*greensFunction(k, tauOne-tauR, mu)*\
-        greensFunction(k,tauR-tauTwo,mu)*greensFunction(k-q,tauTwo-tauOne,mu)\
-            *phononProp(tauTwo-tauOne)/q**2/(2*np.pi)**3
-    pXY=pins/(tauR-tauL)*omegaPH*np.exp(-omegaPH*(tauTwo-tauOne))\
-        *np.exp(-q**2/(2*m)*(tauTwo-tauOne))/2*np.pi*m/(tauTwo-tauOne)**(3/2)
-    pYX=prem/(order+1)
-    #what are pins prem
-    return wY*pYX/(wX*pXY)
+    q=np.linalg.norm(q)
+    rad=-1/(2*m)*(tauOne-tauTwo)*(q**2+2*m*(omegaPH-1))
+    return 2*(2*np.pi)**.5*alpha**2*np.exp(rad)*prem*(tauL-tauR)\
+            /((1+order)*pins*q**2*omegaPH)*(m/(tauTwo-tauOne))**(3/2)
 
 def phononProp(tau,omegaPH=1):
     return np.exp(-omegaPH*(tau))
@@ -192,37 +185,39 @@ class diagMC:
         #needs to genrate k, tauMax
         return k,qList
         
-    def insertProp(qList,tauMax,k,m,mu,alpha,order,pIns,pRem,omegaPH=1):
+    def insertProp(qList,tauMax,k,mu,alpha,order,pIns,pRem,m=1,omegaPH=1):
         '''
         
 
         Parameters
         ----------
-        qList : TYPE
-            DESCRIPTION.
-        tauMax : TYPE
-            DESCRIPTION.
-        k : TYPE
-            DESCRIPTION.
-        m : TYPE
-            DESCRIPTION.
-        mu : TYPE
-            DESCRIPTION.
-        alpha : TYPE
-            DESCRIPTION.
-        order : TYPE
-            DESCRIPTION.
-        pIns : TYPE
-            DESCRIPTION.
-        pRem : TYPE
-            DESCRIPTION.
-        omegaPH : TYPE, optional
-            DESCRIPTION. The default is 1.
+        qList : list 
+            List of tuples that contains q, tau1, tau2
+        tauMax : float
+            maximum allowed tau for the pruposes of bounding world line .
+        k : float
+            momentum of bare electron.
+        mu : float
+            energy shift used as a tuning parameter.
+        alpha : float
+            coupling constant.
+        order : int
+            order of the expansion.
+        pIns : float
+            probability weight for an insert.
+        pRem : float
+            probabliity weight for a remove.
+        m : float, optional
+            mass of electron usualy =1.
+        omegaPH : float, optional
+            frequency of the phonon. The default is 1.
 
         Returns
         -------
-        TYPE
-            DESCRIPTION.
+        qList : list
+            new list of tuples depending on if acceptance is rejected or accepted.
+        bool : boolian
+            true if accepted, false if rejected.
 
         '''
         #phononList needs to be list with tuples that are the end points of the electron prop 
@@ -243,7 +238,7 @@ class diagMC:
         u=nrandG.uniform()
         tauTwo=tauOne-np.log(u)/omegaPH
         if tauTwo>tauRight:
-            return qList
+            return qList,0
         mean=np.zeros(3)
         variance=np.diag(m/(tauTwo-tauOne)*np.ones(3))
         q=nrandG.multivariate_normal(mean,variance)
@@ -252,46 +247,52 @@ class diagMC:
         
         
         x=nrandG.uniform()
-        
-        
-        if x<r(pIns,pRem,tauOne,tauTwo,tauLeft,tauRight,q,k,mu,alpha,order):#put in all the variables
+        R=r(pIns,pRem,tauOne,tauTwo,tauLeft,tauRight,q,k,mu,alpha,order)
+        if x<R:
             qList.append(dummy)
-        
-        return qList,1
+            return qList,1
+        else:
+            return qList,0
     
         
    
         
         
-    def removeProp(qList,k,mu,alpha,order,pIns,pRem):
+    def removeProp(qList,k,mu,alpha,order,pIns,pRem,m=1,omegaPH=1):
         '''
         
 
         Parameters
         ----------
-        qList : TYPE
-            DESCRIPTION.
-        k : TYPE
-            DESCRIPTION.
-        mu : TYPE
-            DESCRIPTION.
-        alpha : TYPE
-            DESCRIPTION.
-        order : TYPE
-            DESCRIPTION.
-        pIns : TYPE
-            DESCRIPTION.
-        pRem : TYPE
-            DESCRIPTION.
+        qList : list 
+            List of tuples that contains q, tau1, tau2
+        k : float
+            momentum of bare electron.
+        mu : float
+            energy shift used as a tuning parameter.
+        alpha : float
+            coupling constant.
+        order : int
+            order of the expansion.
+        pIns : float
+            probability weight for an insert.
+        pRem : float
+            probabliity weight for a remove.
+        m : float, optional
+            mass of electron usualy =1.
+        omegaPH : float, optional
+            frequency of the phonon. The default is 1.
 
         Returns
         -------
-        TYPE
-            DESCRIPTION.
+        qList : list
+            new list of tuples depending on if acceptance is rejected or accepted.
+        bool : boolian
+            true if accepted, false if rejected.
 
         '''
         #pick random prop
-        index=nrandG.integer(len(qList))
+        index=nrandG.integers(len(qList))
         q,tauLeft,tauRight=qList[index]
         
         #currently my list is unordered this would be faster if it was ordered also
@@ -299,11 +300,13 @@ class diagMC:
         for i in qList:
             dummy,tL,tR=i
             if inBetween(tauLeft,tauRight,tL,tR)==True:
-                return qList
+                return qList,0
             
         if nrandG.uniform(1)<r(pIns,pRem,tR,tL,tauLeft,tauRight,q,k,mu,alpha,order)**-1:
             qList.pop(index)
-        return qList,-1
+            return qList,1
+        else:
+            return qList,0
         
         #need to compute inverse r if passes then remove index value from q list
             
@@ -317,16 +320,16 @@ class diagMC:
 
         Parameters
         ----------
-        qList : TYPE
-            DESCRIPTION.
-        k : TYPE
-            DESCRIPTION.
-        tauMax : TYPE
-            DESCRIPTION.
-        mu : TYPE
-            DESCRIPTION.
-        order : TYPE
-            DESCRIPTION.
+        qList : list 
+            List of tuples that contains q, tau1, tau2
+        k : float
+            momentum of bare electron.
+        tauMax : float
+            maximum allowed tau for the pruposes of bounding world line.
+        mu : float
+            energy shift used as a tuning parameter.
+        order : int
+            order of the expansion.
 
         Returns
         -------
