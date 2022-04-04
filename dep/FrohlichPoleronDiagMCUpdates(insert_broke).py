@@ -144,7 +144,7 @@ class diagMC:
         #accept only if metroplis with min of [1,r] where r is G_0(p new,tau)/G_)(p old,tau)
         return
         
-    def tauChange(p,tauMax,tau,mu,m=1):
+    def tauChange(p,tauMax,mu,m=1):
         '''
         only acepts if order=0
         selesct new tau using exponential distrobution
@@ -179,11 +179,11 @@ class diagMC:
         eta_p=epsilonP-mu
         
         tauPrime=-np.log(u)/abs(eta_p)
-        
         if tauPrime<tauMax:
             return tauPrime,1
         else:
-            return tau,0
+            #need to pass through old tau
+            return tauMax,0
         
     '''def genWorldLine(kMax,tauMax):
         k=1
@@ -192,8 +192,8 @@ class diagMC:
         #needs to genrate k, tauMax
         return k,qList'''
         
-    def insertProp(qList,tau,k,mu,alpha,order,pIns,pRem,m=1,omegaPH=1):
-        
+    def insertProp(qList,tauMax,k,mu,alpha,order,pIns,pRem,m=1,omegaPH=1):
+        #is broken need to change currently inserts arc anywhre needs to check if its under
         
         '''
         qList needs to be list with tuples that are the end points of the 
@@ -236,15 +236,37 @@ class diagMC:
         
         
         
-        tauList=[0]
+        endL=[0]
+        endR=[]
         for i in qList:
+            #prob nested for loop need to go through every end point check if
+            #its inbetween any of the other points if it is reject otherwise add
+            #to appropriate list
             q,a,b=i
-            tauList.extend([a,b])
+            dummyA=True
+            dummyB=True
+            for j in qList:
+                k,c,d=j
+                if c<a<d:
+                    dummyA=False
+                if c<b<d:
+                    dummyB=False
+            if dummyA==True:
+                endL.append(a)
+            if dummyB==True:
+                endR.append(b)
         
-        tauList.sort()
-        index=nrandG.integers(len(tauList))
-        tauList.append(tau)
-        tauLeft,tauRight=tauList[index],tauList[index+1]
+        #randomly pick an initial endpoint 
+        index=nrandG.integers(len(endL))
+        tauLeft=endL[index]
+        
+        
+        endR.append(tauMax)
+        endR.extend(endL)
+        endR.sort()
+        
+        tauRight=endR[endR.index(tauLeft)+1]
+
         tauOne=nrandG.uniform(tauLeft,tauRight)
         u=nrandG.uniform()
         tauTwo=tauOne-np.log(u)/omegaPH
@@ -259,9 +281,8 @@ class diagMC:
         
         
         x=nrandG.uniform()
-        
         R=r(pIns,pRem,tauOne,tauTwo,tauLeft,tauRight,q,k,mu,alpha,order)
-        
+        print(R)
         if x<R:
             qList.append(dummy)
             return qList,1
@@ -272,7 +293,7 @@ class diagMC:
    
         
         
-    def removeProp(qList,tau,k,mu,alpha,order,pIns,pRem,m=1,omegaPH=1):
+    def removeProp(qList,k,mu,alpha,order,pIns,pRem,m=1,omegaPH=1):
         '''
         
 
@@ -310,24 +331,15 @@ class diagMC:
         q,tauLeft,tauRight=qList[index]
         
         #currently my list is unordered this would be faster if it was ordered
-        endList=[0,tau]
         for i in qList:
-            dummy,t1,t2=i
-            endList.extend([t1,t2])
-            if inBetween(tauLeft,tauRight,t1,t2)==True:
+            dummy,tL,tR=i
+            if inBetween(tauLeft,tauRight,tL,tR)==True:
                 return qList,0
             
-        endList.sort()
-        
-        #should pick the nearest endpoints to the ark needed to be removed
-        tL=endList[endList.index(tauLeft)-1]
-        tR=endList[endList.index(tauRight)+1]
-         
-    
-    
-        R=r(pIns,pRem,tL,tR,tauLeft,tauRight,q,k,mu,alpha,order)**-1
-
-        if nrandG.uniform(1)<R:
+        #think this is implimented wrong dont know what tR,tL to use
+        #definatly causing issues. 
+            
+        if nrandG.uniform(1)<r(pIns,pRem,tR,tL,tauLeft,tauRight,q,k,mu,alpha,order)**-1:
             qList.pop(index)
             return qList,1
         else:
@@ -337,7 +349,7 @@ class diagMC:
             
             
 
-    def swap(qList,k,tau,mu,order):
+    def swap(qList,k,tauMax,mu,order):
         '''
         
 
@@ -363,9 +375,9 @@ class diagMC:
         
     
         
-        index=nrandG.integers(len(qList))
+        index=nrandG.integer(len(qList))
         qOne,tauOne,tauA=qList[index]
-        dummy=tau
+        dummy=tauMax
         i=0
         while i<=order:
             if i!=index:

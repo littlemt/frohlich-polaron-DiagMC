@@ -6,50 +6,68 @@ Created on Sat Feb 26 15:23:02 2022
 @author: Milo Kamiya Belmont
 """
 
-from dep.FredrichPoleronCode import diagMC as FPC
+from dep.FrohlichPoleronDiagMCUpdates import diagMC as FPC
 import time
 import numpy.random as nrng
 import matplotlib.pyplot as mpl
 
+    
+
 nrg=nrng.default_rng()
 
 
-def main(tauMax,mu,alpha,P):
+def full(tauMax,runTime,p,pExt,mu,k,alpha,m=1):
     #P is list of probablilitys for each update need to sum to one
     #gen initial conditions 
-    for i in range(1000):
-        tauList=[]
-        qList=[]
-        k=1
-        order=FPC.order(qList)
+    tauList=[]
+    qList=[]
+    total=sum(p)
+    pTau=p[0]/total
+    pIns=p[1]/total
+    pRem=p[2]/total
+    pSwap=p[3]/total
+    countT=0
+    countI=0
+    countR=0
+    countS=0
+    tau=tauMax
+    runTime=runTime*3600+time.time()
+    while time.time()<runTime:
         
+        
+        order=FPC.order(qList)
         x=nrg.uniform()
         
-        if order==0:
-            tau,i=FPC.changeTau()
-            FPC.insert()
-            FPC.remove()
-        elif order==1:
-            FPC.insert()
-            FPC.remove()
-        else:
-            FPC.insert()
-            FPC.remove()
-            FPC.swap()
-    return 
+        if x<pTau and order==0:
+            tau,i=FPC.tauChange(pExt,tauMax,tau,mu,m)
+            tauList.append(tau)
+            countT+=i
+        elif pTau<=x<pTau+pIns:
+            qList,i=FPC.insertProp(qList, tau, k, mu, alpha, order,pIns,pRem)
+            countI+=i
+        elif pTau+pIns<=x<pTau+pIns+pRem and order>=1:
+            qList,i=FPC.removeProp(qList,tau, k, mu, alpha, order,pIns,pRem)
+            countR+=i
+        elif pTau+pIns+pRem<=x<1 and order<=2:
+            qList,i=FPC.swap(qList, k, tauMax, mu, order)
+            countS+=i
+            
+    count=[countT,countI,countR,countS]
+    return tauList,qList,count
         
-def zero_order(tauMax,runTime,p,mu,alpha,m=1):
+def zero_order(tauMax,runTime,pExt,mu,alpha,m=1):
     tauList=[]
     runTime=runTime*3600+time.time()
     count=0
+    tau=tauMax
     while time.time()<runTime:
-        tau,i = FPC.tauChange(p,tauMax,mu)
+        tau,i = FPC.tauChange(pExt,tauMax,tau,mu)
         tauList.append(tau)
         count += i
         
     return tauList,count
 
-def first_order(tauMax,runTime,p,mu,k,alpha,m=1):
+def first_order(tauMax,runTime,p,pExt,mu,k,alpha,m=1):
     tauList=[]
     qList=[]
     total=sum(p)
@@ -65,14 +83,14 @@ def first_order(tauMax,runTime,p,mu,k,alpha,m=1):
         x=nrg.uniform()
         order=FPC.order(qList)
         if order==0 and 0<=x<=pTau:
-            tau,i = FPC.tauChange(k,tauMax,mu,m)
+            tau,i = FPC.tauChange(pExt,tauMax,tau,mu,m)
             tauList.append(tau)
             countT += i
         elif pTau<x<=pTau+pIns:
-            qList,i=FPC.insertProp(qList, tauMax, k, m, mu, alpha, order,pIns,pRem)
+            qList,i=FPC.insertProp(qList, tau, k, mu, alpha, order,pIns,pRem)
             countI+=i
-        elif pTau+pIns<x<=1 and FPC.order(qList)>=1:
-            qList,i=FPC.removeProp(qList, k, mu, alpha, order,pIns,pRem)
+        elif pTau+pIns<x<=1 and order>=1:
+            qList,i=FPC.removeProp(qList,tau, k, mu, alpha, order,pIns,pRem)
             countR+=i
     count=[countT,countI,countR]
     return tauList,qList,count
