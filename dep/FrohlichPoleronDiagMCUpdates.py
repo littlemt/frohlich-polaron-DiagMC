@@ -39,7 +39,8 @@ def inBetween(a,b,c,d):
      Returns
      -------
      bool
-         DESCRIPTION.
+         if true then an arc passes through another arc 
+         if false an arc that is alone.
  
      '''
      w=c<a<d
@@ -51,11 +52,30 @@ def inBetween(a,b,c,d):
      else:
          return False
      
-def r(pins,prem,tauR,tauL,tauOne,tauTwo,q,k,mu,alpha,order,m=1,omegaPH=1):
+def r(pins,prem,tauL,tauR,tauOne,tauTwo,q,k,mu,alpha,order,m=1,omegaPH=1):
+    
     q=np.linalg.norm(q)
+    
     rad=q**2/2/m*(tauTwo-tauOne)
-    return 2*(2*np.pi)**.5*alpha**2*np.exp(rad)*prem*(tauL-tauR)\
-            /((1+order)*pins*q**2*omegaPH)*(m/(tauTwo-tauOne))**(3/2)
+    
+    if 0<rad<1E-10:
+        rad=0
+    if -1E-10<rad<0:
+        rad=0
+    if 1E2<rad:
+        rad=1E2
+    if rad<-1E2:
+        rad=-1E2
+        
+    r1=2*(2*np.pi)**.5*alpha**2*np.exp(rad)*prem*(tauR-tauL)*m**(3/2)
+    r2=((1+order)*pins*q**2*omegaPH)*((tauTwo-tauOne))**(3/2)
+    
+    #for some reason tauTwo-tauOne is negative so square root is beeing rejected
+    #only happening in remove update
+    
+    
+    
+    return r1/r2
 
 def phononProp(tau,omegaPH=1):
     return np.exp(-omegaPH*(tau))
@@ -241,10 +261,18 @@ class diagMC:
             q,a,b=i
             tauList.extend([a,b])
         
+        #creates a list of all the verticies then sorts them
         tauList.sort()
+        
+        #picks a random vertex then adds the maximum vertex
         index=nrandG.integers(len(tauList))
         tauList.append(tau)
+        
+        #defines tauL, tauR by the random vertex and the next greater one
         tauLeft,tauRight=tauList[index],tauList[index+1]
+        
+        #picks a point unformly between the two vertex picked previously 
+        
         tauOne=nrandG.uniform(tauLeft,tauRight)
         u=nrandG.uniform()
         tauTwo=tauOne-np.log(u)/omegaPH
@@ -260,7 +288,8 @@ class diagMC:
         
         x=nrandG.uniform()
         
-        R=r(pIns,pRem,tauOne,tauTwo,tauLeft,tauRight,q,k,mu,alpha,order)
+        
+        R=r(pIns,pRem,tauLeft,tauRight,tauOne,tauTwo,q,k,mu,alpha,order)
         
         if x<R:
             qList.append(dummy)
@@ -310,6 +339,10 @@ class diagMC:
         q,tauLeft,tauRight=qList[index]
         
         #currently my list is unordered this would be faster if it was ordered
+        
+        #this loop both checks if the picked ark is being crossed and unpacks
+        #the vertex to a list 
+        
         endList=[0,tau]
         for i in qList:
             dummy,t1,t2=i
@@ -320,11 +353,15 @@ class diagMC:
         endList.sort()
         
         #should pick the nearest endpoints to the ark needed to be removed
-        tL=endList[endList.index(tauLeft)-1]
-        tR=endList[endList.index(tauRight)+1]
+        iL=endList.index(tauLeft)
+        iR=endList.index(tauRight)
+        tL=endList[iL-1]
+        tR=endList[iR+1]
          
     
-    
+        
+        print('re',tauLeft,tauRight)
+        
         R=r(pIns,pRem,tL,tR,tauLeft,tauRight,q,k,mu,alpha,order)**-1
 
         if nrandG.uniform(1)<R:
@@ -361,27 +398,55 @@ class diagMC:
 
         '''
         
-    
         
-        index=nrandG.integers(len(qList))
+        #picks a random arc
+        index=nrandG.integers(order)
         qOne,tauOne,tauA=qList[index]
+        
+        #creates dummy comparison variable 
+        #uses tau as the difference cannot be greater
         dummy=tau
+        
+        #iterable 
         i=0
-        while i<=order:
-            if i!=index:
+        #loops over all arcs 
+        while i<order:
+            
+            #skips the ark that was picked as this will give a differnece of zero
+            if i==index:
+                i+=1
                 continue
+            
+            #takes the current list value and gives it dummy variables 
             qP,tauBP,tauP=qList[i]
+            
+            #checks to see if the difference between the left picked arc and 
+            
+            #think this is broke
             if abs(tauOne-tauP)<dummy:
                 index2=i
                 dummy=abs(tauOne-tauP)
                 qTwo,tauTwo,tauB=qP,tauP,tauBP
+            i+=1
+                
+        q1=np.linalg.norm(qOne)
+        q2=np.linalg.norm(qTwo)
+        kP=k-q1-q2
         
-        kP=k-qOne-qTwo
+        #wY is returning 0 alot
         
-        wX=greensFunction(k, tauOne-tauTwo, mu)*phononProp(abs(tauOne-tauA))/qOne**2\
-            *phononProp(abs(tauTwo-tauB))/qTwo**2
-        wY=-greensFunction(kP, tauTwo-tauOne, mu)*phononProp(abs(tauOne-tauB))/qTwo**2\
-            *phononProp(abs(tauTwo-tauA))/qOne**2
+        wX=greensFunction(k, tauOne-tauTwo, mu)*phononProp(abs(tauOne-tauA))/q1**2\
+            *phononProp(abs(tauTwo-tauB))/q2**2
+        wY=-greensFunction(kP, tauTwo-tauOne, mu)*phononProp(abs(tauOne-tauB))/q2**2\
+            *phononProp(abs(tauTwo-tauA))/q1**2
+            
+            
+        if 0<wX<1E-8:
+            wX=1E-8
+        if -1E-8<wX<0:
+            wX=-1E-8
+            
+            
         
         if nrandG.uniform(1)<wY/wX:
             if index<index2:
@@ -395,7 +460,9 @@ class diagMC:
             qList.append(phonon1)
             phonon2=qTwo,tauOne,tauB
             qList.append(phonon2)
-            return qList
+            return qList,1
+        else:
+            return qList,0
     
         
     def order(qList):
